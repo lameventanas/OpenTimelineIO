@@ -181,7 +181,7 @@ class Adapter(plugins.PythonPlugin):
         ):
             result = self.write_to_string(input_otio, **adapter_argument_map)
             with open(filepath, 'w') as fo:
-                fo.write(result)
+                fo.write(result.decode('utf-8'))
             return filepath
 
         return self._execute_function(
