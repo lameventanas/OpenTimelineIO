@@ -28,6 +28,7 @@ import os
 from xml.etree import ElementTree as ET
 import opentimelineio as otio
 import datetime
+import json
 
 
 def read_property(element, name):
@@ -133,6 +134,13 @@ def read_from_string(input_str):
                                 effect_name=kdenlive_id,
                                 metadata={'keyframes': read_keyframes(
                                     read_property(effect, 'level'), rate)}))
+                        else:
+                            props = {}
+                            for prop in effect.findall('property'):
+                                props[prop.get('name')] = prop.text
+                            clip.effects.append(otio.schema.Effect(
+                                effect_name = kdenlive_id,
+                                metadata = props))
                     track.append(clip)
         timeline.tracks.append(track)
 
@@ -332,8 +340,11 @@ def write_to_string(input_otio):
                         filt = ET.SubElement(clip, 'filter')
                         write_property(filt, 'kdenlive_id', kid)
                         write_property(filt, 'mlt_service', kid)
-                        write_property(filt, 'level',
-                                       write_keyframes(effect.metadata['keyframes']))
+                        write_property(filt, 'level', write_keyframes(effect.metadata['keyframes']))
+                    else:
+                        filt = ET.SubElement(clip, 'filter')
+                        for prop in effect.metadata:
+                            write_property(filt, prop, effect.metadata[prop])
             elif isinstance(item, otio.schema.Transition):
                 print('Transitions handling to be added')
         mlt.append(subtractor)
