@@ -106,11 +106,13 @@ def read_from_string(input_str):
                     available_range = otio.opentime.TimeRange(
                         start_time=time(producer.get('in'), rate),
                         duration=time(producer.get('out'), rate)
-                        - time(producer.get('in'), rate))
+                        - time(producer.get('in'), rate)
+                        + otio.opentime.RationalTime(1, rate))
                     source_range = otio.opentime.TimeRange(
                         start_time=time(item.get('in'), rate),
                         duration=time(item.get('out'), rate)
-                        - time(item.get('in'), rate))
+                        - time(item.get('in'), rate)
+                        + otio.opentime.RationalTime(1, rate))
                     # media reference clip
                     reference = None
                     if service in ['avformat', 'avformat-novalidate', 'qimage']:
@@ -256,7 +258,8 @@ def write_to_string(input_otio):
             'id': 'producer{}'.format(len(media_prod)),
             'in': clock(clip.media_reference.available_range.start_time),
             'out': clock((clip.media_reference.available_range.start_time +
-                          clip.media_reference.available_range.duration))})
+                          clip.media_reference.available_range.duration -
+                          otio.opentime.RationalTime(1, rate)))})
         ET.SubElement(main_bin, 'entry',
                       {'producer': 'producer{}'.format(len(media_prod))})
         write_property(producer, 'mlt_service', service)
@@ -327,7 +330,7 @@ def write_to_string(input_otio):
                         and item.media_reference.generator_kind == 'SolidColor':
                     resource = item.media_reference.parameters['color']
                 clip_in = item.source_range.start_time
-                clip_out = item.source_range.duration + clip_in
+                clip_out = item.source_range.duration + clip_in - otio.opentime.RationalTime(1, rate)
                 clip = ET.SubElement(playlist, 'entry', {
                     'producer': media_prod[resource].attrib['id']
                     if item.media_reference and
