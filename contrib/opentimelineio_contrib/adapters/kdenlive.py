@@ -73,6 +73,15 @@ def read_from_string(input_str):
     timeline = otio.schema.Timeline(
         name=mlt.get('name', 'Kdenlive imported timeline'))
 
+    playlist_main_bin = mlt.find("playlist[@id='main_bin']")
+    if playlist_main_bin is not None:
+        guides = playlist_main_bin.find("property[@name='kdenlive:docproperties.guides']")
+        if guides is not None:
+            timeline.metadata['guides'] = json.loads(guides.text)
+            for guide in timeline.metadata['guides']:
+                if 'pos' in guide:
+                    guide['pos'] = time(str(guide['pos']), rate)
+
     maintractor = mlt.find("tractor[@global_feed='1']")
     for maintrack in maintractor.findall('track'):
         if maintrack.get('producer') == 'black_track':
@@ -213,6 +222,19 @@ def write_to_string(input_otio):
     write_property(main_bin, 'kdenlive:docproperties.decimalPoint', '.')
     write_property(main_bin, 'kdenlive:docproperties.version', '0.98')
     write_property(main_bin, 'xml_retain', '1')
+    if 'guides' in input_otio.metadata:
+        # We need to convert guides from AnyVector<AnyDictionary> to list<dict>, otherwise it is not json serializable
+        guides_for_json = []
+        for guide in input_otio.metadata['guides']:
+            guide_for_json = {}
+            for key in guide:
+                guide_for_json[key] = guide[key]
+            if 'pos' in guide_for_json:
+                # Convert 'pos' from RationalTime back to frames
+                guide_for_json['pos'] = guide_for_json['pos'].to_frames()
+            guides_for_json.append(guide_for_json)
+        guides_json = json.dumps(guides_for_json, sort_keys=True, indent=4)
+        write_property(main_bin, 'kdenlive:docproperties.guides', guides_json)
     media_prod = {}
     for clip in input_otio.each_clip():
         service = None
