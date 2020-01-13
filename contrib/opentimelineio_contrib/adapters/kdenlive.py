@@ -176,7 +176,10 @@ def write_property(element, name, value):
 def clock(time):
     """Encode time to an MLT timecode string
     after format hours:minutes:seconds.floatpart"""
-    return str(datetime.timedelta(seconds=time.value / time.rate))
+    s = str(datetime.timedelta(seconds=time.value / time.rate))
+    if not '.' in s:
+        s += '.000'
+    return s
 
 
 def write_keyframes(kfdict):
