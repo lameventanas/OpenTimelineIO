@@ -31,6 +31,21 @@ import datetime
 import json
 
 
+class JsonEncoderCustom(json.JSONEncoder):
+    def default(self, o):
+        if isinstance(o, otio._otio.AnyDictionary):
+            return dict(o)
+        if isinstance(o, otio._otio.AnyVector):
+            return list(o)
+        return json.JSONEncoder.default(self, o)
+
+class JsonEncoderGuides(JsonEncoderCustom):
+    def default(self, o):
+        if isinstance(o, otio.opentime.RationalTime):
+            return o.to_frames()
+        return JsonEncoderCustom.default(self, o)
+
+
 def read_property(element, name):
     """Decode an MLT item property
     which value is contained in a "property" XML element
@@ -81,6 +96,9 @@ def read_from_string(input_str):
             for guide in timeline.metadata['guides']:
                 if 'pos' in guide:
                     guide['pos'] = time(str(guide['pos']), rate)
+        groups = playlist_main_bin.find("property[@name='kdenlive:docproperties.groups']")
+        if groups is not None:
+            timeline.metadata['groups'] = json.loads(groups.text)
 
     maintractor = mlt.find("tractor[@global_feed='1']")
     for maintrack in maintractor.findall('track'):
@@ -228,18 +246,13 @@ def write_to_string(input_otio):
     write_property(main_bin, 'kdenlive:docproperties.version', '0.98')
     write_property(main_bin, 'xml_retain', '1')
     if 'guides' in input_otio.metadata:
-        # We need to convert guides from AnyVector<AnyDictionary> to list<dict>, otherwise it is not json serializable
-        guides_for_json = []
-        for guide in input_otio.metadata['guides']:
-            guide_for_json = {}
-            for key in guide:
-                guide_for_json[key] = guide[key]
-            if 'pos' in guide_for_json:
-                # Convert 'pos' from RationalTime back to frames
-                guide_for_json['pos'] = guide_for_json['pos'].to_frames()
-            guides_for_json.append(guide_for_json)
-        guides_json = json.dumps(guides_for_json, sort_keys=True, indent=4)
+        guides_json = json.dumps(input_otio.metadata['guides'], sort_keys=True, indent=4, cls=JsonEncoderGuides)
         write_property(main_bin, 'kdenlive:docproperties.guides', guides_json)
+
+    if 'groups' in input_otio.metadata:
+        groups_json = json.dumps(input_otio.metadata['groups'], sort_keys=True, indent=4, cls=JsonEncoderCustom)
+        write_property(main_bin, 'kdenlive:docproperties.groups', groups_json)
+
     media_prod = {}
     for clip in input_otio.each_clip():
         service = None
