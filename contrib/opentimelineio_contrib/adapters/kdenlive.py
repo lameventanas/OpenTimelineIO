@@ -26,6 +26,7 @@
 import re
 import os
 from xml.etree import ElementTree as ET
+from xml.dom import minidom
 import opentimelineio as otio
 import datetime
 import json
@@ -393,7 +394,10 @@ def write_to_string(input_otio):
         mlt.append(subtractor)
     mlt.append(maintractor)
 
-    return ET.tostring(mlt, encoding='utf-8')
+    # Pretty print xml:
+    rough_string = ET.tostring(mlt, encoding='utf-8')
+    reparsed = minidom.parseString(rough_string)
+    return reparsed.toprettyxml(indent="\t").encode('utf-8')
 
 
 if __name__ == '__main__':
