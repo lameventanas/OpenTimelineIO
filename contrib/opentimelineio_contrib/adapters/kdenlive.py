@@ -121,11 +121,13 @@ def read_from_string(input_str):
                 elif item.tag == 'entry':
                     producer = byid[item.get('producer')]
                     service = read_property(producer, 'mlt_service')
-                    available_range = otio.opentime.TimeRange(
-                        start_time=time(producer.get('in'), rate),
-                        duration=time(producer.get('out'), rate)
-                        - time(producer.get('in'), rate)
-                        + otio.opentime.RationalTime(1, rate))
+                    available_range = None
+                    if 'in' in producer.keys() and 'out' in producer.keys():
+                        available_range = otio.opentime.TimeRange(
+                            start_time=time(producer.get('in'), rate),
+                            duration=time(producer.get('out'), rate)
+                            - time(producer.get('in'), rate)
+                            + otio.opentime.RationalTime(1, rate))
                     source_range = otio.opentime.TimeRange(
                         start_time=time(item.get('in'), rate),
                         duration=time(item.get('out'), rate)
