@@ -134,6 +134,12 @@ def read_from_string(input_str):
                         duration=time(item.get('out'), rate)
                         - time(item.get('in'), rate)
                         + otio.opentime.RationalTime(1, rate))
+                    props = {}
+                    for prop in producer.findall('property'):
+                        # TODO: Folders are not supported yet
+                        if prop.get('name') == 'kdenlive:folderid':
+                            continue
+                        props[prop.get('name')] = prop.text
                     # media reference clip
                     reference = None
                     if service in ['avformat', 'avformat-novalidate', 'qimage']:
@@ -150,6 +156,7 @@ def read_from_string(input_str):
                     clip = otio.schema.Clip(
                         name=read_property(producer, 'kdenlive:clipname'),
                         source_range=source_range,
+                        metadata=props,
                         media_reference=reference or otio.schema.MissingReference())
                     for effect in item.findall('filter'):
                         kdenlive_id = read_property(effect, 'kdenlive_id')
@@ -283,6 +290,10 @@ def write_to_string(input_otio):
         if clip.name:
             write_property(producer, 'kdenlive:clipname', clip.name)
         media_prod[resource] = producer
+        for prop_key, prop_val in clip.metadata.items():
+            if prop_key in ['set.test_audio', 'set.test_image', 'xml']:
+                continue
+            write_property(producer, prop_key, prop_val)
 
     # Substitute source clip to be referred to when meeting an unsupported clip
     unsupported = ET.SubElement(mlt, 'producer',
