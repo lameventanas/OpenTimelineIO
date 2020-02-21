@@ -142,7 +142,7 @@ def read_from_string(input_str):
                         props[prop.get('name')] = prop.text
                     # media reference clip
                     reference = None
-                    if service in ['avformat', 'avformat-novalidate', 'qimage']:
+                    if service in ['avformat', 'avformat-novalidate', 'qimage', 'consumer']:
                         reference = otio.schema.ExternalReference(
                             target_url=read_property(
                                 producer, 'kdenlive:originalurl') or
@@ -152,6 +152,10 @@ def read_from_string(input_str):
                         reference = otio.schema.GeneratorReference(
                             generator_kind='SolidColor',
                             parameters={'color': read_property(producer, 'resource')},
+                            available_range=available_range)
+                    elif service == 'kdenlivetitle':
+                        reference = otio.schema.GeneratorReference(
+                            generator_kind=service,
                             available_range=available_range)
                     clip = otio.schema.Clip(
                         name=read_property(producer, 'kdenlive:clipname'),
@@ -267,15 +271,22 @@ def write_to_string(input_otio):
     for clip in input_otio.each_clip():
         service = None
         resource = None
+        media_key = None
         if isinstance(clip.media_reference, otio.schema.ExternalReference):
             resource = clip.media_reference.target_url
             service = 'qimage' if os.path.splitext(resource)[1].lower() \
                 in ['.png', '.jpg', '.jpeg'] else 'avformat'
+            media_key = resource
         elif isinstance(clip.media_reference, otio.schema.GeneratorReference) \
                 and clip.media_reference.generator_kind == 'SolidColor':
             service = 'color'
             resource = clip.media_reference.parameters['color']
-        if not (service and resource) or (resource in media_prod.keys()):
+            media_key = resource
+        elif isinstance(clip.media_reference, otio.schema.GeneratorReference) \
+                and clip.media_reference.generator_kind == 'kdenlivetitle':
+            service = 'kdenlivetitle'
+            media_key = clip.metadata['kdenlive:file_hash']
+        if service != 'kdenlivetitle' and (not (service and resource) or (resource in media_prod.keys())):
             continue
         producer = ET.SubElement(mlt, 'producer', {
             'id': 'producer{}'.format(len(media_prod)),
@@ -289,11 +300,11 @@ def write_to_string(input_otio):
         write_property(producer, 'resource', resource)
         if clip.name:
             write_property(producer, 'kdenlive:clipname', clip.name)
-        media_prod[resource] = producer
         for prop_key, prop_val in clip.metadata.items():
             if prop_key in ['set.test_audio', 'set.test_image', 'xml']:
                 continue
             write_property(producer, prop_key, prop_val)
+        media_prod[media_key] = producer
 
     # Substitute source clip to be referred to when meeting an unsupported clip
     unsupported = ET.SubElement(mlt, 'producer',
@@ -356,6 +367,10 @@ def write_to_string(input_otio):
                                 otio.schema.GeneratorReference) \
                         and item.media_reference.generator_kind == 'SolidColor':
                     resource = item.media_reference.parameters['color']
+                elif isinstance(item.media_reference,
+                                otio.schema.GeneratorReference) \
+                        and item.media_reference.generator_kind == 'kdenlivetitle':
+                    resource = item.metadata['kdenlive:file_hash']
                 clip_in = item.source_range.start_time
                 clip_out = item.source_range.duration + clip_in - otio.opentime.RationalTime(1, rate)
                 clip = ET.SubElement(playlist, 'entry', {
