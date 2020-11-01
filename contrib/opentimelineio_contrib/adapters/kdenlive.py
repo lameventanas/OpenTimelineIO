@@ -58,6 +58,7 @@ def time(clock, fps):
     """Decode an MLT time
     which is either a frame count or a timecode string
     after format hours:minutes:seconds.floatpart"""
+    print('time() clock:', clock, 'fps:', fps)
     hms = [float(x) for x in clock.replace(',', '.').split(':')]
     f = 0
     m = fps if len(hms) > 1 else 1  # no delimiter, it is a frame number
@@ -82,6 +83,7 @@ def read_from_string(input_str):
     combining a "main_bin" playlist to organize source media,
     and a "global_feed" tractor for timeline.
     (in Kdenlive 19.x, timeline tracks include virtual sub-track, unused for now)"""
+    print('read_from_string() BEGIN --------------------------------------------------')
     mlt, byid = ET.XMLID(input_str)
     profile = mlt.find('profile')
     rate = (float(profile.get('frame_rate_num'))
@@ -90,16 +92,31 @@ def read_from_string(input_str):
         name=mlt.get('name', 'Kdenlive imported timeline'))
 
     playlist_main_bin = mlt.find("playlist[@id='main_bin']")
+    print('playlist_main_bin:', playlist_main_bin)
     if playlist_main_bin is not None:
+        print('playlist_main_bin:')
+        ET.dump(playlist_main_bin)
+
         guides = playlist_main_bin.find("property[@name='kdenlive:docproperties.guides']")
         if guides is not None:
+            print('guides:')
+            ET.dump(guides)
+            print('guides text:', guides.text)
             timeline.metadata['guides'] = json.loads(guides.text)
             for guide in timeline.metadata['guides']:
+                print('guide:', guide)
                 if 'pos' in guide:
+                    print('time:', time(str(guide['pos']), rate))
                     guide['pos'] = time(str(guide['pos']), rate)
+            print('timeline.metadata:', timeline.metadata)
+
         groups = playlist_main_bin.find("property[@name='kdenlive:docproperties.groups']")
         if groups is not None:
+            print('groups:')
+            ET.dump(groups)
+            print('groups text:', groups.text)
             timeline.metadata['groups'] = json.loads(groups.text)
+            print('timeline.metadata:', timeline.metadata)
 
     maintractor = mlt.find("tractor[@global_feed='1']")
     for maintrack in maintractor.findall('track'):
@@ -114,7 +131,11 @@ def read_from_string(input_str):
             track.kind = otio.schema.TrackKind.Video
         for subtrack in subtractor.findall('track'):
             playlist = byid[subtrack.get('producer')]
+
+            print('SUBTRACK: ', subtrack)
+            print('PLAYLIST: ', playlist)
             for item in playlist.iter():
+                print('PLAYLIST ITEM:', ET.dump(item))
                 if item.tag == 'blank':
                     gap = otio.schema.Gap(
                         duration=time(item.get('length'), rate))
@@ -122,6 +143,8 @@ def read_from_string(input_str):
                 elif item.tag == 'entry':
                     producer = byid[item.get('producer')]
                     service = read_property(producer, 'mlt_service')
+                    print('producer:')
+                    ET.dump(producer)
                     available_range = None
                     if 'in' in producer.keys() and 'out' in producer.keys():
                         available_range = otio.opentime.TimeRange(
@@ -136,6 +159,9 @@ def read_from_string(input_str):
                         + otio.opentime.RationalTime(1, rate))
                     props = {}
                     for prop in producer.findall('property'):
+                        #print('prop: ' + prop.get('name') + ' -> ' + prop.text)
+                        #print(ET.dump(prop))
+
                         # TODO: Folders are not supported yet
                         if prop.get('name') == 'kdenlive:folderid':
                             continue
@@ -162,7 +188,11 @@ def read_from_string(input_str):
                         source_range=source_range,
                         metadata=props,
                         media_reference=reference or otio.schema.MissingReference())
+                    print('item:')
+                    print(ET.dump(item))
                     for effect in item.findall('filter'):
+                        print('effect:')
+                        print(ET.dump(effect))
                         kdenlive_id = read_property(effect, 'kdenlive_id')
                         if kdenlive_id in ['fadein', 'fade_from_black',
                                            'fadeout', 'fade_to_black']:
@@ -180,10 +210,15 @@ def read_from_string(input_str):
                         else:
                             props = {}
                             for prop in effect.findall('property'):
+                                #print('prop: ' + prop.get('name') + ' -> ' + prop.text)
+                                #print(ET.dump(prop))
                                 props[prop.get('name')] = prop.text
+                            print('props:', props)
                             clip.effects.append(otio.schema.Effect(
                                 effect_name = kdenlive_id,
                                 metadata = props))
+                    print('reference:', reference)
+                    print('effects:', item.findall('filter'))
                     track.append(clip)
         timeline.tracks.append(track)
 
@@ -196,6 +231,7 @@ def read_from_string(input_str):
                     in_offset=time(transition.get('in'), rate),
                     out_offset=time(transition.get('out'), rate)))
 
+    print('read_from_string() END --------------------------------------------------')
     return timeline
 
 
@@ -210,9 +246,17 @@ def write_property(element, name, value):
 def clock(time):
     """Encode time to an MLT timecode string
     after format hours:minutes:seconds.floatpart"""
-    s = str(datetime.timedelta(seconds=time.value / time.rate))
-    if not '.' in s:
-        s += '.000'
+    if True:
+        s = str(int(time.value)) # use just frame number instead of hh:mm:ss.frame
+    else:
+        # This is incorrect, because it produces hh:mm:ss,msecs but Kdenlive wants hh:mm:ss.frame where frame is 0..24 when your project has 25 frames per second.
+        s = str(datetime.timedelta(seconds=time.value / time.rate))
+        flsep_wrong = '.'
+        flsep_correct = ','
+        s = s.replace(flsep_wrong, flsep_correct)
+        if not flsep_correct in s:
+            s += flsep_correct + '000'
+    print('clock() time:', time, ' s:', s)
     return s
 
 
@@ -226,6 +270,7 @@ def write_to_string(input_otio):
     """Write a timeline to Kdenlive project
     Re-creating the bin storing all used source clips
     and constructing the tracks"""
+    print('write_to_string() BEGIN --------------------------------------------------')
     if not isinstance(input_otio, otio.schema.Timeline) and len(input_otio) > 1:
         print('WARNING: Only one timeline supported, using the first one.')
         input_otio = input_otio[0]
@@ -259,12 +304,23 @@ def write_to_string(input_otio):
     write_property(main_bin, 'kdenlive:docproperties.decimalPoint', '.')
     write_property(main_bin, 'kdenlive:docproperties.version', '0.98')
     write_property(main_bin, 'xml_retain', '1')
+    print('timeline metadata:', input_otio.metadata)
     if 'guides' in input_otio.metadata:
+        print('write guides:', input_otio.metadata['guides'])
+        print('guides type:', type(list(input_otio.metadata['guides'])))
+        if len(list(input_otio.metadata['guides'])) > 0:
+            print('guides inside type:', type(list(input_otio.metadata['guides'])[0]))
         guides_json = json.dumps(input_otio.metadata['guides'], sort_keys=True, indent=4, cls=JsonEncoderGuides)
+        print('guides_json:', guides_json)
         write_property(main_bin, 'kdenlive:docproperties.guides', guides_json)
 
     if 'groups' in input_otio.metadata:
+        print('write groups:', input_otio.metadata['groups'])
+        print('groups type:', type(list(input_otio.metadata['groups'])))
+        if len(input_otio.metadata['groups']) > 0:
+            print('groups inside type:', type(list(input_otio.metadata['groups'])[0]))
         groups_json = json.dumps(input_otio.metadata['groups'], sort_keys=True, indent=4, cls=JsonEncoderCustom)
+        print('groups_json:', groups_json)
         write_property(main_bin, 'kdenlive:docproperties.groups', groups_json)
 
     media_prod = {}
@@ -272,27 +328,42 @@ def write_to_string(input_otio):
         service = None
         resource = None
         media_key = None
+        is_expandable = False
         if isinstance(clip.media_reference, otio.schema.ExternalReference):
             resource = clip.media_reference.target_url
-            service = 'qimage' if os.path.splitext(resource)[1].lower() \
-                in ['.png', '.jpg', '.jpeg'] else 'avformat'
+            if os.path.splitext(resource)[1].lower() in ['.png', '.jpg', '.jpeg']:
+                service = 'qimage'
+                is_expandable = True
+            else:
+                service = 'avformat'
+                is_expandable = False
             media_key = resource
         elif isinstance(clip.media_reference, otio.schema.GeneratorReference) \
                 and clip.media_reference.generator_kind == 'SolidColor':
             service = 'color'
             resource = clip.media_reference.parameters['color']
             media_key = resource
+            is_expandable = True
         elif isinstance(clip.media_reference, otio.schema.GeneratorReference) \
                 and clip.media_reference.generator_kind == 'kdenlivetitle':
+            print('Unsupported clip:', clip)
+            print('Unsupported clip props:', clip.media_reference.parameters)
             service = 'kdenlivetitle'
             media_key = clip.metadata['kdenlive:file_hash']
+            is_expandable = True
         if service != 'kdenlivetitle' and (not (service and resource) or (resource in media_prod.keys())):
             continue
+
+        if is_expandable:
+            duration = otio.opentime.RationalTime(1000000, rate)
+        else:
+            duration = clip.media_reference.available_range.duration
+
         producer = ET.SubElement(mlt, 'producer', {
             'id': 'producer{}'.format(len(media_prod)),
             'in': clock(clip.media_reference.available_range.start_time),
             'out': clock((clip.media_reference.available_range.start_time +
-                          clip.media_reference.available_range.duration -
+                          duration -
                           otio.opentime.RationalTime(1, rate)))})
         ET.SubElement(main_bin, 'entry',
                       {'producer': 'producer{}'.format(len(media_prod))})
@@ -302,6 +373,9 @@ def write_to_string(input_otio):
             write_property(producer, 'kdenlive:clipname', clip.name)
         for prop_key, prop_val in clip.metadata.items():
             if prop_key in ['set.test_audio', 'set.test_image', 'xml']:
+                continue
+            # For image clips, discard the 'length' property to allow extending the clip duration
+            if is_expandable and prop_key in ['length', 'kdenlive:duration']:
                 continue
             write_property(producer, prop_key, prop_val)
         media_prod[media_key] = producer
@@ -373,12 +447,16 @@ def write_to_string(input_otio):
                     resource = item.metadata['kdenlive:file_hash']
                 clip_in = item.source_range.start_time
                 clip_out = item.source_range.duration + clip_in - otio.opentime.RationalTime(1, rate)
+                print('resource:', resource)
                 clip = ET.SubElement(playlist, 'entry', {
                     'producer': media_prod[resource].attrib['id']
                     if item.media_reference and
                     not item.media_reference.is_missing_reference
                     else 'unsupported',
                     'in': clock(clip_in), 'out': clock(clip_out)})
+                print('clip:', ET.dump(clip))
+                print('item:', item)
+                print('')
                 # Clip effects
                 for effect in item.effects:
                     kid = effect.effect_name
@@ -413,17 +491,31 @@ def write_to_string(input_otio):
                         write_property(filt, 'level', write_keyframes(effect.metadata['keyframes']))
                     else:
                         filt = ET.SubElement(clip, 'filter')
+                        print('TEST resource:', resource)
+                        print('filt:', filt)
+                        print('effect.metadata:', effect.metadata)
                         for prop in effect.metadata:
+                            print('prop:', prop)
                             write_property(filt, prop, effect.metadata[prop])
             elif isinstance(item, otio.schema.Transition):
                 print('Transitions handling to be added')
         mlt.append(subtractor)
     mlt.append(maintractor)
 
+    print('write_to_string() END --------------------------------------------------')
     # Pretty print xml:
     rough_string = ET.tostring(mlt, encoding='utf-8')
+    print('rough_string:', rough_string)
     reparsed = minidom.parseString(rough_string)
-    return reparsed.toprettyxml(indent="\t").encode('utf-8')
+    pretty_string = reparsed.toprettyxml(indent="\t").encode('utf-8')
+    print('pretty_string:', pretty_string)
+    # WARNING: Pretty print causes unwanted string escaping, e.g.:
+    #          "comment": "guide_beat"
+    #          becomes:
+    #          &quot;comment&quot; &quot;guide_beat&quot;
+    #          And Kdenlive has problems loading it correctly
+    #return pretty_string
+    return rough_string
 
 
 if __name__ == '__main__':
