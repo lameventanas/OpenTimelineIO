@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 #
-# Copyright 2017 Pixar Animation Studios
+# Copyright Contributors to the OpenTimelineIO project
 #
 # Licensed under the Apache License, Version 2.0 (the "Apache License")
 # with the following modification; you may not use this file except in
@@ -41,13 +41,16 @@ EXEMPLE_25_FPS_PATH = os.path.join(SAMPLE_DATA_DIR, "25fps.edl")
 NO_SPACES_PATH = os.path.join(SAMPLE_DATA_DIR, "no_spaces_test.edl")
 DISSOLVE_TEST = os.path.join(SAMPLE_DATA_DIR, "dissolve_test.edl")
 DISSOLVE_TEST_2 = os.path.join(SAMPLE_DATA_DIR, "dissolve_test_2.edl")
+DISSOLVE_TEST_3 = os.path.join(SAMPLE_DATA_DIR, "dissolve_test_3.edl")
 GAP_TEST = os.path.join(SAMPLE_DATA_DIR, "gap_test.edl")
+WIPE_TEST = os.path.join(SAMPLE_DATA_DIR, "wipe_test.edl")
 TIMECODE_MISMATCH_TEST = os.path.join(SAMPLE_DATA_DIR, "timecode_mismatch.edl")
 SPEED_EFFECTS_TEST = os.path.join(SAMPLE_DATA_DIR, "speed_effects.edl")
 SPEED_EFFECTS_TEST_SMALL = os.path.join(
     SAMPLE_DATA_DIR,
     "speed_effects_small.edl"
 )
+MULTIPLE_TARGET_AUDIO_PATH = os.path.join(SAMPLE_DATA_DIR, "multi_audio.edl")
 
 
 class EDLAdapterTest(unittest.TestCase, otio_test_utils.OTIOAssertions):
@@ -93,7 +96,7 @@ class EDLAdapterTest(unittest.TestCase, otio_test_utils.OTIOAssertions):
             otio.opentime.from_timecode("00:00:04:19", fps)
         )
 
-        self.assertEqual(len(timeline.tracks[0][3].markers), 1)
+        self.assertEqual(len(timeline.tracks[0][3].markers), 2)
         marker = timeline.tracks[0][3].markers[0]
         self.assertEqual(marker.name, "ANIM FIX NEEDED")
         self.assertEqual(marker.metadata.get("cmx_3600").get("color"), "RED")
@@ -399,6 +402,36 @@ V     C        00:00:00:00 00:00:00:05 00:00:00:00 00:00:00:05
         self.assertEqual(trck[2].source_range.start_time.value, 86400 + 201)
         self.assertEqual(trck[2].duration().value, 10)
 
+    def test_dissolve_parse_full_clip_dissolve(self):
+        tl = otio.adapters.read_from_file(DISSOLVE_TEST_3)
+        self.assertEqual(len(tl.tracks[0]), 5)
+
+        self.assertTrue(isinstance(tl.tracks[0][2], otio.schema.Transition))
+
+        trck = tl.tracks[0]
+        clip_a = trck[0]
+        self.assertEqual(clip_a.name, "Clip A.mov")
+        self.assertEqual(clip_a.duration().value, 61)
+
+        clip_b = trck[1]
+        self.assertEqual(clip_b.name, "Clip B.mov")
+        self.assertEqual(clip_b.source_range.start_time.value, 86400 + 144)
+        self.assertEqual(clip_b.duration().value, 15)
+
+        transition = trck[2]
+        self.assertEqual(transition.in_offset.value, 15)
+        self.assertEqual(transition.out_offset.value, 15)
+
+        clip_c = trck[3]
+        self.assertEqual(clip_c.name, "Clip C.mov")
+        self.assertEqual(clip_c.source_range.start_time.value, 86400 + 829)
+        self.assertEqual(clip_c.duration().value, 15)
+
+        clip_d = trck[4]
+        self.assertEqual(clip_d.name, "Clip D.mov")
+        self.assertEqual(clip_d.source_range.start_time.value, 86400)
+        self.assertEqual(clip_d.duration().value, 46)
+
     def test_dissolve_with_odd_frame_count_maintains_length(self):
         # EXERCISE
         tl = otio.adapters.read_from_string(
@@ -411,6 +444,19 @@ V     C        00:00:00:00 00:00:00:05 00:00:00:00 00:00:00:05
 
         # VALIDATE
         self.assertEqual(tl.duration().value, (11 * 24) + 12)
+
+    def test_wipe_parse(self):
+        tl = otio.adapters.read_from_file(WIPE_TEST)
+        self.assertEqual(len(tl.tracks[0]), 3)
+
+        wipe = tl.tracks[0][1]
+        self.assertTrue(isinstance(wipe, otio.schema.Transition))
+
+        self.assertEqual(wipe.transition_type, "SMPTE_Wipe")
+        self.assertEqual(wipe.metadata["cmx_3600"]["transition"], "W001")
+
+        self.assertEqual(tl.tracks[0][0].duration().value, 14)
+        self.assertEqual(tl.tracks[0][2].duration().value, 6)
 
     def test_fade_to_black_ends_with_gap(self):
         # EXERCISE
@@ -811,6 +857,24 @@ V     C        00:00:00:00 00:00:00:05 00:00:00:00 00:00:00:05
 '''
 
         self.assertMultiLineEqual(result, expected)
+
+    def test_read_edl_with_multiple_target_audio_tracks(self):
+        tl = otio.adapters.read_from_file(MULTIPLE_TARGET_AUDIO_PATH)
+
+        self.assertEqual(len(tl.audio_tracks()), 2)
+
+        first_track, second_track = tl.audio_tracks()
+        self.assertEqual(first_track.name, "A1")
+        self.assertEqual(second_track.name, "A2")
+
+        self.assertEqual(first_track[0].name, "AX")
+        self.assertEqual(second_track[0].name, "AX")
+
+        expected_range = otio.opentime.TimeRange(
+            duration=otio.opentime.from_timecode("00:56:55:22", rate=24)
+        )
+        self.assertEqual(first_track[0].source_range, expected_range)
+        self.assertEqual(second_track[0].source_range, expected_range)
 
     def test_custom_reel_names(self):
         track = otio.schema.Track()

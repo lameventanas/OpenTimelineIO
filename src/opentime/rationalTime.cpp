@@ -119,7 +119,7 @@ RationalTime::from_timecode(std::string const& timecode, double rate, ErrorStatu
     if (frames >= nominal_fps) {
         *error_status = ErrorStatus(ErrorStatus::TIMECODE_RATE_MISMATCH,
                                     string_printf("Frame rate mismatch.  Timecode '%s' has "
-                                                  "frames beyond %f", timecode.c_str(),
+                                                  "frames beyond %d", timecode.c_str(),
                                                   nominal_fps - 1));
         return RationalTime::_invalid_time;
     }
@@ -193,8 +193,10 @@ RationalTime::to_timecode(
 ) const {
 
     *error_status = ErrorStatus();
+
+    double frames_in_target_rate = this->value_rescaled_to(rate);
     
-    if (_value < 0) {
+    if (frames_in_target_rate < 0) {
         *error_status = ErrorStatus(ErrorStatus::NEGATIVE_VALUE);
         return std::string();
     }
@@ -252,7 +254,7 @@ RationalTime::to_timecode(
             (std::round(rate) * 60) - dropframes);
 
     // If the number of frames is more than 24 hours, roll over clock
-    double value = std::fmod(_value, frames_per_24_hours);
+    double value = std::fmod(frames_in_target_rate, frames_per_24_hours);
 
     if (rate_is_dropframe) {
         int ten_minute_chunks = static_cast<int>(std::floor(value/frames_per_10_minutes));
@@ -288,7 +290,7 @@ RationalTime::to_time_string() const {
     // result and return the string at the end with a '-'. This provides
     // compatibility with ffmpeg, which allows negative time strings.
     if (std::signbit(total_seconds)) {
-        total_seconds = abs(total_seconds);
+        total_seconds = std::fabs(total_seconds);
         is_negative = true;
     }
 

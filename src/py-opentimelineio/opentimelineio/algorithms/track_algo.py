@@ -1,5 +1,5 @@
 #
-# Copyright 2017 Pixar Animation Studios
+# Copyright Contributors to the OpenTimelineIO project
 #
 # Licensed under the Apache License, Version 2.0 (the "Apache License")
 # with the following modification; you may not use this file except in
@@ -47,7 +47,7 @@ def track_trimmed_to_range(in_track, trim_range):
     # iterate backwards so we can delete items
     for c, child in reversed(list(enumerate(new_track))):
         child_range = track_map[child]
-        if not trim_range.overlaps(child_range):
+        if not trim_range.intersects(child_range):
             # completely outside the trim range, so we discard it
             del new_track[c]
         elif trim_range.contains(child_range):
@@ -96,10 +96,11 @@ def track_with_expanded_transitions(in_track):
         Clip1, T, Clip2
 
     will return:
-        Clip1', Clip1_t, T, Clip2_t, Clip2'
+        Clip1', (Clip1_t, T, Clip2_t), Clip2'
 
     Where Clip1' is the part of Clip1 not in the transition, Clip1_t is the
-    part inside the transition and so on.
+    part inside the transition and so on. Please note that the items used in
+    a transition are encapsulated in `tuple`s
     """
 
     result_track = []

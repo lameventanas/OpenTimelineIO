@@ -1,5 +1,5 @@
 #
-# Copyright (C) 2019 Kdenlive developers <kdenlive@kde.org>
+# Copyright Contributors to the OpenTimelineIO project
 #
 # Licensed under the Apache License, Version 2.0 (the "Apache License")
 # with the following modification; you may not use this file except in
@@ -76,7 +76,7 @@ def read_keyframes(kfstring, rate):
     which are in a semicolon (;) separated list of time/value pair
     separated by = (linear interp) or ~= (spline) or |= (step)
     becomes a dict with RationalTime keys"""
-    return dict((time(t, rate), v)
+    return dict((str(time(t, rate).value), v)
                 for (t, v) in re.findall('([^|~=;]*)[|~]?=([^;]*)', kfstring))
 
 
@@ -265,7 +265,7 @@ def clock(time):
 
 def write_keyframes(kfdict):
     """Build a MLT keyframe string"""
-    return ';'.join('{}={}'.format(str(int(t.value))).format(v)
+    return ';'.join('{}={}'.format(t, v)
                     for t, v in kfdict.items())
 
 
@@ -505,20 +505,7 @@ def write_to_string(input_otio):
         mlt.append(subtractor)
     mlt.append(maintractor)
 
-    DBG('write_to_string() END --------------------------------------------------')
-    # Pretty print xml:
-    rough_string = ET.tostring(mlt, encoding='utf-8')
-    DBG('rough_string:', rough_string)
-    reparsed = minidom.parseString(rough_string)
-    pretty_string = reparsed.toprettyxml(indent="\t").encode('utf-8')
-    DBG('pretty_string:', pretty_string)
-    # WARNING: Pretty print causes unwanted string escaping, e.g.:
-    #          "comment": "guide_beat"
-    #          becomes:
-    #          &quot;comment&quot; &quot;guide_beat&quot;
-    #          And Kdenlive has problems loading it correctly
-    #return pretty_string
-    return rough_string
+    return ET.tostring(mlt).decode().replace("><", ">\n<")
 
 
 if __name__ == '__main__':
@@ -526,4 +513,4 @@ if __name__ == '__main__':
         open('tests/sample_data/kdenlive_example.kdenlive', 'r').read())
     print(str(timeline).replace('otio.schema', "\notio.schema"))
     xml = write_to_string(timeline)
-    print(str(xml).replace("><", ">\n<"))
+    print(str(xml))
