@@ -171,7 +171,7 @@ def read_from_string(input_str):
                         props[prop.get('name')] = prop.text
                     # media reference clip
                     reference = None
-                    if service in ['avformat', 'avformat-novalidate', 'qimage', 'consumer']:
+                    if service in ['avformat', 'avformat-novalidate', 'qimage', 'consumer', 'xml']:
                         reference = otio.schema.ExternalReference(
                             target_url=read_property(
                                 producer, 'kdenlive:originalurl') or
